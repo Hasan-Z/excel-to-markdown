@@ -1,0 +1,850 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Excel to Markdown Converter</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+        .container { max-width: 1200px; margin: 0 auto; }
+        header { text-align: center; color: white; margin-bottom: 40px; }
+        header h1 { font-size: 2.5rem; margin-bottom: 10px; }
+        header p { font-size: 1.1rem; opacity: 0.9; }
+        
+        .upload-section, .preview-section, .result-section {
+            background: white; border-radius: 15px; padding: 40px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.2); margin-bottom: 30px;
+        }
+        .preview-section, .result-section { display: none; }
+        .preview-section.show, .result-section.show { display: block; }
+        
+        .drop-zone {
+            border: 3px dashed #667eea; border-radius: 10px; padding: 60px 20px;
+            text-align: center; cursor: pointer; transition: all 0.3s ease; background: #f8f9ff;
+        }
+        .drop-zone:hover, .drop-zone.dragover {
+            border-color: #764ba2; background: #f0f2ff; transform: translateY(-2px);
+        }
+        .drop-zone-icon { font-size: 3rem; margin-bottom: 15px; }
+        .drop-zone h3 { color: #667eea; margin-bottom: 10px; }
+        .drop-zone p { color: #666; }
+        #fileInput { display: none; }
+        
+        .file-info {
+            margin-top: 20px; padding: 15px; background: #e8f5e9;
+            border-radius: 8px; display: none;
+        }
+        .file-info.show { display: block; }
+        
+        .chunk-options {
+            margin: 20px 0; padding: 15px; background: #f0f4ff;
+            border-radius: 8px; border-left: 4px solid #667eea;
+        }
+        .chunk-options label {
+            display: flex; align-items: center; gap: 10px; cursor: pointer; font-weight: 600;
+        }
+        .chunk-options p { margin: 10px 0 0 28px; font-size: 0.9rem; color: #666; }
+        #chunkSizeControl { margin-top: 15px; margin-left: 28px; }
+        #chunkSizeControl label { font-size: 0.9rem; color: #555; margin-right: 8px; }
+        #chunkSize { margin-right: 15px; padding: 6px 12px; border-radius: 4px; border: 1px solid #ddd; }
+        #customChunkSize { display: none; margin-right: 15px; padding: 6px 10px; width: 100px; border: 1px solid #ddd; border-radius: 4px; }
+        #customChunkSize.show { display: inline-block; }
+        
+        .btn {
+            padding: 12px 24px; border: none; border-radius: 8px;
+            cursor: pointer; font-weight: 600; transition: all 0.3s; font-size: 1rem;
+        }
+        .btn-primary {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white; width: 100%; margin-top: 20px;
+        }
+        .btn-primary:hover { transform: translateY(-2px); box-shadow: 0 5px 15px rgba(102,126,234,0.4); }
+        .btn-primary:disabled { background: #ccc; cursor: not-allowed; transform: none; }
+        .btn-secondary { background: #6c757d; color: white; }
+        .btn-secondary:hover { background: #5a6268; }
+        .btn-copy { background: #667eea; color: white; }
+        .btn-copy:hover { background: #5568d3; }
+        .btn-download { background: #2e7d32; color: white; }
+        .btn-download:hover { background: #1b5e20; }
+        .btn-clear { background: #d32f2f; color: white; }
+        .btn-clear:hover { background: #b71c1c; }
+        .btn-small { padding: 6px 12px; font-size: 0.85rem; }
+        .btn-load { background: #1976d2; color: white; padding: 8px 16px; }
+        .btn-load:hover { background: #1565c0; }
+        
+        .action-buttons { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 20px; }
+        
+        .sheets-container { margin: 20px 0; }
+        .sheet-card {
+            border: 2px solid #e0e0e0; border-radius: 10px; margin-bottom: 15px;
+            overflow: hidden; background: #fafafa;
+            transition: all 0.3s ease;
+        }
+        .sheet-card.selected { border-color: #667eea; background: #f8f9ff; }
+        .sheet-card.disabled { opacity: 0.6; }
+        
+        .sheet-header {
+            display: flex; justify-content: space-between; align-items: center;
+            padding: 15px 20px; background: #f1f3f9; cursor: pointer;
+        }
+        .sheet-header:hover { background: #e8ebf5; }
+        .sheet-title { display: flex; align-items: center; gap: 10px; font-weight: 600; cursor: pointer; }
+        .sheet-title input { width: 18px; height: 18px; cursor: pointer; }
+        .sheet-meta { font-size: 0.85rem; color: #666; }
+        
+        .columns-grid {
+            padding: 15px 20px; display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+            gap: 8px; max-height: 200px; overflow-y: auto;
+        }
+        .column-item {
+            display: flex; align-items: center; gap: 8px;
+            padding: 8px; background: white; border-radius: 6px;
+            border: 1px solid #e0e0e0; font-size: 0.9rem;
+        }
+        .column-item input { width: 16px; height: 16px; cursor: pointer; }
+        .column-item input:disabled { cursor: not-allowed; opacity: 0.5; }
+        .column-item:hover { background: #f8f9ff; }
+        
+        .select-all-cols {
+            padding: 10px 20px; text-align: right; border-top: 1px solid #e0e0e0;
+            background: #f1f3f9; font-size: 0.9rem;
+        }
+        .select-all-cols a { color: #667eea; cursor: pointer; text-decoration: none; }
+        .select-all-cols a:hover { text-decoration: underline; }
+        
+        .row-selection-area {
+            padding: 15px 20px; background: #fafafa;
+            border-top: 1px solid #e0e0e0;
+        }
+        .row-controls {
+            display: flex; justify-content: space-between; align-items: center;
+            margin-bottom: 15px; flex-wrap: wrap; gap: 10px;
+        }
+        .row-info { font-size: 0.9rem; color: #666; }
+        .row-table-container {
+            max-height: 300px; overflow: auto;
+            border: 1px solid #e0e0e0; border-radius: 6px;
+        }
+        .row-table {
+            width: 100%; border-collapse: collapse; font-size: 0.85rem;
+        }
+        .row-table th, .row-table td {
+            padding: 8px 12px; text-align: left;
+            border-bottom: 1px solid #e0e0e0;
+        }
+        .row-table th { background: #f1f3f9; position: sticky; top: 0; }
+        .row-table tr:hover { background: #f8f9ff; }
+        .row-table input[type="checkbox"] { width: 16px; height: 16px; cursor: pointer; }
+        .row-table .row-index {
+            background: #e0e0e0; color: #555; font-weight: 600;
+            text-align: center; width: 60px;
+        }
+        .select-all-rows {
+            padding: 10px 20px; text-align: right;
+            background: #f1f3f9; font-size: 0.9rem;
+        }
+        .select-all-rows a { color: #667eea; cursor: pointer; text-decoration: none; margin: 0 5px; }
+        .select-all-rows a:hover { text-decoration: underline; }
+        
+        .chunk-info {
+            margin-bottom: 20px; padding: 15px; background: #e3f2fd;
+            border-radius: 8px; font-size: 1rem;
+        }
+        .chunk-container {
+            margin-bottom: 25px; border: 2px solid #e0e0e0;
+            border-radius: 10px; overflow: hidden; background: white;
+        }
+        .chunk-header {
+            display: flex; justify-content: space-between; align-items: center;
+            padding: 12px 15px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white; flex-wrap: wrap; gap: 10px;
+        }
+        .chunk-header h3 { font-size: 1rem; font-weight: 600; }
+        .chunk-header .chunk-size {
+            font-size: 0.85rem; opacity: 0.9; background: rgba(255,255,255,0.2);
+            padding: 4px 10px; border-radius: 12px;
+        }
+        .chunk-actions { display: flex; gap: 8px; }
+        .chunk-actions .btn { padding: 6px 12px; font-size: 0.85rem; background: rgba(255,255,255,0.2); }
+        .chunk-actions .btn:hover { background: rgba(255,255,255,0.3); }
+        
+        .markdown-output {
+            background: #f5f5f5; padding: 20px; font-family: 'Courier New', monospace;
+            white-space: pre-wrap; word-wrap: break-word; max-height: 400px;
+            overflow-y: auto; line-height: 1.6; font-size: 0.9rem;
+        }
+        
+        .loading { text-align: center; padding: 20px; display: none; }
+        .loading.show { display: block; }
+        .spinner {
+            border: 4px solid #f3f3f3; border-top: 4px solid #667eea;
+            border-radius: 50%; width: 40px; height: 40px;
+            animation: spin 1s linear infinite; margin: 0 auto 10px;
+        }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+        
+        .error-message {
+            background: #ffebee; color: #c62828; padding: 15px;
+            border-radius: 8px; margin-top: 20px; display: none;
+        }
+        .error-message.show { display: block; }
+        .success-message {
+            background: #e8f5e9; color: #2e7d32; padding: 10px;
+            border-radius: 6px; margin-top: 10px; display: none; text-align: center;
+        }
+        .success-message.show { display: block; }
+        
+        footer { text-align: center; color: white; margin-top: 40px; opacity: 0.8; }
+        footer a { color: white; text-decoration: none; }
+        footer a:hover { text-decoration: underline; }
+        
+        @media (max-width: 768px) {
+            header h1 { font-size: 2rem; }
+            .upload-section, .preview-section, .result-section { padding: 20px; }
+            .columns-grid { grid-template-columns: 1fr; }
+            .action-buttons { flex-direction: column; }
+            .btn { width: 100%; }
+            .row-table { font-size: 0.75rem; }
+            .row-table th, .row-table td { padding: 4px 6px; }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>📊 Excel to Markdown Converter</h1>
+            <p>Select sheets, columns & rows, convert to Markdown for AI</p>
+        </header>
+
+        <section class="upload-section" id="uploadSection">
+            <div class="drop-zone" id="dropZone">
+                <div class="drop-zone-icon">📁</div>
+                <h3>Drop your Excel file here</h3>
+                <p>or click to browse (supports .xlsx, .xls)</p>
+            </div>
+            <input type="file" id="fileInput" accept=".xlsx,.xls" />
+            
+            <div class="file-info" id="fileInfo">
+                <strong>Selected:</strong> <span id="fileName"></span>
+            </div>
+
+            <button class="btn btn-primary" id="previewBtn" disabled>
+                🔍 Preview Sheets & Columns
+            </button>
+
+            <div class="loading" id="loading">
+                <div class="spinner"></div>
+                <p id="loadingText">Processing...</p>
+            </div>
+            <div class="error-message" id="errorMessage"></div>
+        </section>
+
+        <section class="preview-section" id="previewSection">
+            <h2 style="margin-bottom: 20px;">✏️ Select Data to Convert</h2>
+            <p style="margin-bottom: 20px; color: #666;">
+                Check the sheets, columns, and rows you want to include.
+            </p>
+            
+            <div class="sheets-container" id="sheetsContainer"></div>
+            
+            <div class="chunk-options">
+                <label>
+                    <input type="checkbox" id="enableChunking">
+                    <span>🔗 Split into chunks</span>
+                </label>
+                <p style="margin: 10px 0 0 28px; font-size: 0.9rem; color: #666;">
+                    Split output for easy pasting into AI chat
+                </p>
+                <div id="chunkSizeControl" style="display: none;">
+                    <label>Chunk size:</label>
+                    <select id="chunkSize">
+                        <option value="3500">3,500 chars</option>
+                        <option value="15000" selected>15,000 chars</option>
+                        <option value="30000">30,000 chars</option>
+                        <option value="65000">65,000 chars (ChatGPT Web)</option>
+                        <option value="custom">Custom...</option>
+                    </select>
+                    <input type="number" id="customChunkSize" placeholder="Enter chars" min="100">
+                </div>
+            </div>
+
+            <div style="display: flex; gap: 10px; margin-top: 20px;">
+                <button class="btn btn-primary" id="convertBtn" style="flex: 1;">
+                    🚀 Convert to Markdown
+                </button>
+                <button class="btn btn-secondary" id="backBtn">← Back</button>
+            </div>
+        </section>
+
+        <section class="result-section" id="resultSection">
+            <div class="result-header">
+                <h2>✅ Result</h2>
+                <div class="action-buttons">
+                    <button class="btn btn-secondary" id="backToSelectBtn">← Back</button>
+                    <button class="btn btn-copy" id="copyAllBtn">📋 Copy All</button>
+                    <button class="btn btn-download" id="downloadBtn">💾 Download</button>
+                    <button class="btn btn-clear" id="clearBtn">🗑️ Clear</button>
+                </div>
+            </div>
+            
+            <div class="chunk-info" id="chunkInfo" style="display: none;">
+                <strong>📦 <span id="totalChunks">0</span> chunks</strong>
+                <span style="color: #666; margin-left: 10px;">(Size: <span id="displayChunkSize">0</span> chars)</span>
+            </div>
+            
+            <div id="chunksContainer"></div>
+            <div class="success-message" id="successMessage"></div>
+        </section>
+
+        <footer>
+            <p>Built with FastAPI | <a href="/docs" target="_blank" style="color: white;">API Docs</a></p>
+        </footer>
+    </div>
+
+    <script>
+        // DOM Elements
+        const dropZone = document.getElementById('dropZone');
+        const fileInput = document.getElementById('fileInput');
+        const fileInfo = document.getElementById('fileInfo');
+        const fileName = document.getElementById('fileName');
+        const previewBtn = document.getElementById('previewBtn');
+        const previewSection = document.getElementById('previewSection');
+        const sheetsContainer = document.getElementById('sheetsContainer');
+        const convertBtn = document.getElementById('convertBtn');
+        const backBtn = document.getElementById('backBtn');
+        const backToSelectBtn = document.getElementById('backToSelectBtn');
+        const loading = document.getElementById('loading');
+        const loadingText = document.getElementById('loadingText');
+        const errorMessage = document.getElementById('errorMessage');
+        const resultSection = document.getElementById('resultSection');
+        const chunkInfo = document.getElementById('chunkInfo');
+        const totalChunks = document.getElementById('totalChunks');
+        const displayChunkSize = document.getElementById('displayChunkSize');
+        const chunksContainer = document.getElementById('chunksContainer');
+        const copyAllBtn = document.getElementById('copyAllBtn');
+        const downloadBtn = document.getElementById('downloadBtn');
+        const clearBtn = document.getElementById('clearBtn');
+        const successMessage = document.getElementById('successMessage');
+        const enableChunking = document.getElementById('enableChunking');
+        const chunkSizeControl = document.getElementById('chunkSizeControl');
+        const chunkSize = document.getElementById('chunkSize');
+        const customChunkSize = document.getElementById('customChunkSize');
+
+        let selectedFile = null;
+        let fileMetadata = null;
+        let currentChunks = [];
+        let rowSelection = {};
+        let rowOffsets = {};
+        let selectedColumns = {};
+
+        // File handling
+        dropZone.addEventListener('click', () => fileInput.click());
+        fileInput.addEventListener('change', (e) => {
+            if (e.target.files[0]) handleFile(e.target.files[0]);
+        });
+        dropZone.addEventListener('dragover', (e) => { e.preventDefault(); dropZone.classList.add('dragover'); });
+        dropZone.addEventListener('dragleave', () => { dropZone.classList.remove('dragover'); });
+        dropZone.addEventListener('drop', (e) => {
+            e.preventDefault();
+            dropZone.classList.remove('dragover');
+            if (e.dataTransfer.files[0]) handleFile(e.dataTransfer.files[0]);
+        });
+
+        function handleFile(file) {
+            const validExt = file.name.endsWith('.xlsx') || file.name.endsWith('.xls');
+            if (!validExt) { showError('Please upload .xlsx or .xls file'); return; }
+            selectedFile = file;
+            fileName.textContent = `${file.name} (${formatFileSize(file.size)})`;
+            fileInfo.classList.add('show');
+            previewBtn.disabled = false;
+            hideError();
+        }
+
+        function formatFileSize(bytes) {
+            if (bytes < 1024) return bytes + ' B';
+            else if (bytes < 1048576) return (bytes / 1024).toFixed(1) + ' KB';
+            else return (bytes / 1048576).toFixed(1) + ' MB';
+        }
+
+        // Preview
+        previewBtn.addEventListener('click', async () => {
+            if (!selectedFile) return;
+            showLoading('Reading file...');
+            
+            const formData = new FormData();
+            formData.append('file', selectedFile);
+            
+            try {
+                const response = await fetch('/preview', { method: 'POST', body: formData });
+                const data = await response.json();
+                
+                if (!response.ok) throw new Error(data.detail);
+                
+                fileMetadata = data.sheets;
+                rowSelection = {};
+                rowOffsets = {};
+                selectedColumns = {};
+                renderSheetSelection();
+                
+                document.getElementById('uploadSection').style.display = 'none';
+                previewSection.classList.add('show');
+                
+            } catch (error) {
+                showError(error.message);
+            } finally {
+                hideLoading();
+            }
+        });
+
+        function renderSheetSelection() {
+            sheetsContainer.innerHTML = '';
+            
+            Object.entries(fileMetadata).forEach(([sheetName, sheetData], idx) => {
+                const card = document.createElement('div');
+                card.className = 'sheet-card selected';
+                card.dataset.sheet = sheetName;
+                
+                rowOffsets[sheetName] = 0;
+                rowSelection[sheetName] = [];
+                selectedColumns[sheetName] = [...sheetData.columns];
+                
+                card.innerHTML = `
+                    <div class="sheet-header" data-sheet="${sheetName}">
+                        <label class="sheet-title">
+                            <input type="checkbox" class="sheet-cb" data-sheet="${sheetName}" checked>
+                            <strong>${sheetName}</strong>
+                        </label>
+                        <span class="sheet-meta">${sheetData.row_count} rows • ${sheetData.columns.length} cols</span>
+                    </div>
+                    <div class="columns-grid" id="colsGrid-${sheetName}">
+                        ${sheetData.columns.map(col => `
+                            <label class="column-item">
+                                <input type="checkbox" class="col-cb" data-sheet="${sheetName}" data-col="${escapeAttr(col)}" checked onchange="updateSelectedColumns('${sheetName}')">
+                                <span>${col}</span>
+                            </label>
+                        `).join('')}
+                    </div>
+                    <div class="select-all-cols">
+                        <a href="#" onclick="toggleAllCols('${sheetName}', true); return false;">All Columns</a> | 
+                        <a href="#" onclick="toggleAllCols('${sheetName}', false); return false;">None</a>
+                    </div>
+                    <div class="row-selection-area">
+                        <div class="row-controls">
+                            <label>
+                                <input type="checkbox" class="enable-rows-cb" data-sheet="${sheetName}" onchange="toggleRowSelection('${sheetName}')">
+                                <span>📋 Select Specific Rows</span>
+                            </label>
+                            <span class="row-info" id="rowInfo-${sheetName}">0 of ${sheetData.row_count} rows selected</span>
+                        </div>
+                        <div id="rowContainer-${sheetName}" style="display: none;">
+                            <div class="row-table-container" id="rowTable-${sheetName}">
+                                <p style="padding: 20px; text-align: center; color: #666;">Click "Load Rows" to preview</p>
+                            </div>
+                            <div class="select-all-rows">
+                                <a href="#" onclick="loadRows('${sheetName}', 0); return false;">🔄 Load Rows</a>
+                                <a href="#" onclick="toggleAllVisibleRows('${sheetName}', true); return false;">Select All Visible</a> | 
+                                <a href="#" onclick="toggleAllVisibleRows('${sheetName}', false); return false;">Deselect All</a>
+                            </div>
+                        </div>
+                    </div>
+                `;
+                sheetsContainer.appendChild(card);
+            });
+            
+            // ✅ Add change handlers to sheet checkboxes
+            document.querySelectorAll('.sheet-cb').forEach(cb => {
+                cb.addEventListener('change', function(e) {
+                    e.stopPropagation();
+                    const card = this.closest('.sheet-card');
+                    const isChecked = this.checked;
+                    
+                    card.classList.toggle('selected', isChecked);
+                    
+                    const colCheckboxes = card.querySelectorAll('.col-cb');
+                    colCheckboxes.forEach(colCb => {
+                        colCb.disabled = !isChecked;
+                    });
+                    
+                    const rowArea = card.querySelector('.row-selection-area');
+                    if (rowArea) {
+                        rowArea.style.display = isChecked ? 'block' : 'none';
+                    }
+                });
+            });
+            
+            // ✅ Add click handler to sheet header
+            document.querySelectorAll('.sheet-header').forEach(header => {
+                header.addEventListener('click', function(e) {
+                    if (e.target.tagName === 'A' || e.target.tagName === 'INPUT') {
+                        return;
+                    }
+                    
+                    const cb = this.querySelector('.sheet-cb');
+                    cb.checked = !cb.checked;
+                    cb.dispatchEvent(new Event('change'));
+                });
+            });
+        }
+
+        window.toggleAllCols = function(sheet, select) {
+            const card = document.querySelector(`.sheet-card[data-sheet="${sheet}"]`);
+            const sheetCb = card.querySelector('.sheet-cb');
+            
+            if (!sheetCb.checked) {
+                showError(`Please enable sheet "${sheet}" first`);
+                return;
+            }
+            
+            document.querySelectorAll(`.col-cb[data-sheet="${sheet}"]`).forEach(cb => {
+                cb.checked = select;
+            });
+            updateSelectedColumns(sheet);
+        };
+
+        // ✅ FIXED: Update selected columns when column checkboxes change
+        window.updateSelectedColumns = function(sheetName) {
+            selectedColumns[sheetName] = Array.from(
+                document.querySelectorAll(`.col-cb[data-sheet="${sheetName}"]:checked`)
+            ).map(cb => cb.dataset.col);
+            
+            console.log(`Selected columns for ${sheetName}:`, selectedColumns[sheetName]);
+            
+            // If rows are already loaded, refresh the table with new columns
+            const rowContainer = document.getElementById(`rowContainer-${sheetName}`);
+            if (rowContainer && rowContainer.style.display === 'block') {
+                loadRows(sheetName, rowOffsets[sheetName] || 0);
+            }
+        };
+
+        window.toggleRowSelection = function(sheetName) {
+            const cb = document.querySelector(`.enable-rows-cb[data-sheet="${sheetName}"]`);
+            const container = document.getElementById(`rowContainer-${sheetName}`);
+            container.style.display = cb.checked ? 'block' : 'none';
+            
+            if (cb.checked && rowOffsets[sheetName] === 0) {
+                loadRows(sheetName, 0);
+            }
+        };
+
+        window.loadRows = async function(sheetName, offset) {
+            const tableContainer = document.getElementById(`rowTable-${sheetName}`);
+            tableContainer.innerHTML = '<p style="padding: 20px; text-align: center;">Loading rows...</p>';
+            
+            // ✅ Get currently selected columns
+            const columns = selectedColumns[sheetName] || fileMetadata[sheetName].columns;
+            
+            console.log(`Loading rows for ${sheetName}, columns:`, columns);
+            
+            // ✅ Check if at least one column is selected
+            if (!columns || columns.length === 0) {
+                tableContainer.innerHTML = '<p style="padding: 20px; text-align: center; color: #c62828;">Please select at least one column</p>';
+                return;
+            }
+            
+            const formData = new FormData();
+            formData.append('file', selectedFile);
+            formData.append('sheet_name', sheetName);
+            formData.append('limit', 100);
+            formData.append('offset', offset);
+            
+            try {
+                const response = await fetch('/preview-rows', { method: 'POST', body: formData });
+                const data = await response.json();
+                
+                if (!response.ok) throw new Error(data.detail);
+                
+                rowOffsets[sheetName] = data.offset;
+                renderRowTable(sheetName, data, columns);
+                
+            } catch (error) {
+                tableContainer.innerHTML = `<p style="padding: 20px; text-align: center; color: #c62828;">Error: ${error.message}</p>`;
+            }
+        };
+
+        function renderRowTable(sheetName, data, columns) {
+            const tableContainer = document.getElementById(`rowTable-${sheetName}`);
+            
+            if (!columns || columns.length === 0) {
+                tableContainer.innerHTML = '<p style="padding: 20px; text-align: center; color: #c62828;">Please select at least one column</p>';
+                return;
+            }
+            
+            let html = `<table class="row-table"><thead><tr><th class="row-index">#</th>`;
+            
+            const displayColumns = columns.slice(0, 8);
+            displayColumns.forEach(col => {
+                html += `<th>${escapeHtml(col)}</th>`;
+            });
+            if (columns.length > 8) {
+                html += `<th>... (${columns.length - 8} more)</th>`;
+            }
+            html += `</tr></thead><tbody>`;
+            
+            data.rows.forEach(row => {
+                const isSelected = rowSelection[sheetName].includes(row.index);
+                html += `<tr>
+                    <td class="row-index">
+                        <input type="checkbox" class="row-cb" data-sheet="${sheetName}" data-row="${row.index}" ${isSelected ? 'checked' : ''}>
+                        ${row.index + 1}
+                    </td>`;
+                
+                displayColumns.forEach(col => {
+                    const val = row.data[col] !== null && row.data[col] !== undefined ? String(row.data[col]).substring(0, 30) : '';
+                    html += `<td>${escapeHtml(val)}</td>`;
+                });
+                
+                if (columns.length > 8) {
+                    html += `<td style="color: #999;">...</td>`;
+                }
+                
+                html += `</tr>`;
+            });
+            
+            html += `</tbody></table>`;
+            
+            if (data.has_more) {
+                html += `<div style="padding: 10px; text-align: center;">
+                    <button class="btn btn-load" onclick="loadRows('${sheetName}', ${data.offset + data.limit})">Load More Rows</button>
+                </div>`;
+            }
+            
+            tableContainer.innerHTML = html;
+            
+            tableContainer.querySelectorAll('.row-cb').forEach(cb => {
+                cb.addEventListener('change', () => {
+                    const rowIdx = parseInt(cb.dataset.row);
+                    const sheet = cb.dataset.sheet;
+                    
+                    if (cb.checked) {
+                        if (!rowSelection[sheet].includes(rowIdx)) {
+                            rowSelection[sheet].push(rowIdx);
+                        }
+                    } else {
+                        rowSelection[sheet] = rowSelection[sheet].filter(i => i !== rowIdx);
+                    }
+                    
+                    updateRowInfo(sheet);
+                });
+            });
+            
+            updateRowInfo(sheetName);
+        }
+
+        function updateRowInfo(sheetName) {
+            const count = rowSelection[sheetName].length;
+            const total = fileMetadata[sheetName].row_count;
+            document.getElementById(`rowInfo-${sheetName}`).textContent = `${count} of ${total} rows selected`;
+        }
+
+        window.toggleAllVisibleRows = function(sheetName, select) {
+            const container = document.getElementById(`rowTable-${sheetName}`);
+            container.querySelectorAll('.row-cb').forEach(cb => {
+                cb.checked = select;
+                const rowIdx = parseInt(cb.dataset.row);
+                
+                if (select) {
+                    if (!rowSelection[sheetName].includes(rowIdx)) {
+                        rowSelection[sheetName].push(rowIdx);
+                    }
+                } else {
+                    rowSelection[sheetName] = rowSelection[sheetName].filter(i => i !== rowIdx);
+                }
+            });
+            updateRowInfo(sheetName);
+        };
+
+        // Chunking UI
+        enableChunking.addEventListener('change', () => {
+            chunkSizeControl.style.display = enableChunking.checked ? 'block' : 'none';
+        });
+        
+        chunkSize.addEventListener('change', () => {
+            if (chunkSize.value === 'custom') {
+                customChunkSize.classList.add('show');
+            } else {
+                customChunkSize.classList.remove('show');
+            }
+        });
+
+        function getChunkSize() {
+            if (!enableChunking.checked) return null;
+            if (chunkSize.value === 'custom') {
+                const val = parseInt(customChunkSize.value);
+                return val > 0 ? val : null;
+            }
+            return parseInt(chunkSize.value);
+        }
+
+        function getSelection() {
+            const selection = {};
+            document.querySelectorAll('.sheet-cb:checked').forEach(cb => {
+                const sheet = cb.dataset.sheet;
+                const cols = Array.from(document.querySelectorAll(`.col-cb[data-sheet="${sheet}"]:checked`))
+                    .map(c => c.dataset.col);
+                selection[sheet] = cols.length === fileMetadata[sheet].columns.length ? null : cols;
+            });
+            return Object.keys(selection).length > 0 ? selection : null;
+        }
+
+        function getRowSelection() {
+            const rows = {};
+            document.querySelectorAll('.enable-rows-cb:checked').forEach(cb => {
+                const sheet = cb.dataset.sheet;
+                if (rowSelection[sheet] && rowSelection[sheet].length > 0) {
+                    rows[sheet] = rowSelection[sheet];
+                }
+            });
+            return Object.keys(rows).length > 0 ? rows : null;
+        }
+
+        // Convert
+        convertBtn.addEventListener('click', async () => {
+            const selection = getSelection();
+            if (!selection) { showError('Select at least one sheet/column'); return; }
+            
+            showLoading('Converting...');
+            
+            const formData = new FormData();
+            formData.append('file', selectedFile);
+            formData.append('selection', JSON.stringify(selection));
+            
+            const rows = getRowSelection();
+            if (rows) {
+                formData.append('rows', JSON.stringify(rows));
+            }
+            
+            const cs = getChunkSize();
+            let url = '/convert';
+            if (cs) url = `/convert?chunk_size=${cs}`;
+            
+            try {
+                const response = await fetch(url, { method: 'POST', body: formData });
+                const data = await response.json();
+                
+                if (!response.ok) throw new Error(data.detail);
+                
+                currentChunks = data.chunks || [data.markdown];
+                
+                if (data.chunked && currentChunks.length > 1) {
+                    chunkInfo.style.display = 'block';
+                    totalChunks.textContent = data.total_chunks;
+                    displayChunkSize.textContent = data.chunk_size;
+                    
+                    chunksContainer.innerHTML = currentChunks.map((chunk, i) => `
+                        <div class="chunk-container">
+                            <div class="chunk-header">
+                                <h3>📦 Chunk ${i + 1} of ${data.total_chunks}</h3>
+                                <span class="chunk-size">${chunk.length} chars</span>
+                                <div class="chunk-actions">
+                                    <button class="btn btn-copy btn-small" onclick="copyChunk(${i})">📋 Copy</button>
+                                </div>
+                            </div>
+                            <div class="markdown-output">${escapeHtml(chunk)}</div>
+                        </div>
+                    `).join('');
+                } else {
+                    chunkInfo.style.display = 'none';
+                    chunksContainer.innerHTML = `
+                        <div class="chunk-container">
+                            <div class="chunk-header">
+                                <h3>📄 Full Output</h3>
+                                <span class="chunk-size">${currentChunks[0].length} chars</span>
+                            </div>
+                            <div class="markdown-output">${escapeHtml(currentChunks[0])}</div>
+                        </div>
+                    `;
+                }
+                
+                previewSection.classList.remove('show');
+                resultSection.classList.add('show');
+                showSuccess(`Converted ${Object.keys(selection).length} sheet(s)`);
+                
+            } catch (error) {
+                showError(error.message);
+            } finally {
+                hideLoading();
+            }
+        });
+
+        window.copyChunk = function(i) {
+            navigator.clipboard.writeText(currentChunks[i]).then(() => {
+                showSuccess(`Chunk ${i + 1} copied!`);
+                setTimeout(hideSuccess, 2000);
+            });
+        };
+
+        // Navigation
+        backBtn.addEventListener('click', () => {
+            previewSection.classList.remove('show');
+            document.getElementById('uploadSection').style.display = 'block';
+        });
+
+        backToSelectBtn.addEventListener('click', () => {
+            resultSection.classList.remove('show');
+            previewSection.classList.add('show');
+        });
+
+        // Copy/Download/Clear
+        copyAllBtn.addEventListener('click', () => {
+            const text = currentChunks.join('\n\n---\n\n');
+            navigator.clipboard.writeText(text).then(() => {
+                showSuccess('Copied all!');
+                setTimeout(hideSuccess, 2000);
+            });
+        });
+
+        downloadBtn.addEventListener('click', () => {
+            const text = currentChunks.join('\n\n---\n\n');
+            const blob = new Blob([text], { type: 'text/markdown' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = selectedFile.name.replace(/\.(xlsx|xls)$/i, '.md');
+            a.click();
+            URL.revokeObjectURL(url);
+        });
+
+        clearBtn.addEventListener('click', () => {
+            selectedFile = null;
+            fileMetadata = null;
+            currentChunks = [];
+            rowSelection = {};
+            rowOffsets = {};
+            selectedColumns = {};
+            fileInput.value = '';
+            fileInfo.classList.remove('show');
+            previewBtn.disabled = true;
+            previewSection.classList.remove('show');
+            resultSection.classList.remove('show');
+            document.getElementById('uploadSection').style.display = 'block';
+            chunksContainer.innerHTML = '';
+        });
+
+        // Utilities
+        function escapeHtml(text) {
+            if (!text) return '';
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+        
+        function escapeAttr(text) {
+            return String(text).replace(/"/g, '&quot;');
+        }
+        
+        function showError(msg) { errorMessage.textContent = msg; errorMessage.classList.add('show'); }
+        function hideError() { errorMessage.classList.remove('show'); }
+        function showSuccess(msg) { successMessage.textContent = msg; successMessage.classList.add('show'); }
+        function hideSuccess() { successMessage.classList.remove('show'); }
+        function showLoading(text) { loadingText.textContent = text; loading.classList.add('show'); }
+        function hideLoading() { loading.classList.remove('show'); }
+    </script>
+</body>
+</html>
