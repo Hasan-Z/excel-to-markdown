@@ -327,12 +327,6 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ---
 
-## 📬 Support
-
-- 🐛 **Bug Reports**: [GitHub Issues](https://github.com/yourusername/excel-to-md/issues)
-
----
-
 <div align="center">
 
 **Made with ❤️ using FastAPI & Python**
